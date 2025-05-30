@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "326175765439",
+    "project_id": "istachirna",
+    "storage_bucket": "istachirna.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:326175765439:android:6294cccaa7fd7ccd7b670a",
+        "android_client_info": {
+          "package_name": "com.example.istachirna_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA7qPBJzuaa9yUW26duQFH2v8tPKjeprxY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
