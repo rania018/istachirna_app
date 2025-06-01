@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -10,6 +11,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
+  final AuthService _authService = AuthService();
 
   void _onItemTapped(int index) {
     setState(() {
@@ -29,6 +31,22 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  void _signInWithGoogle() async {
+    try {
+      UserCredential? userCredential = await _authService.signInWithGoogle();
+      if (userCredential != null) {
+        // User signed in successfully
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Signed in as ${userCredential.user?.displayName ?? "User"}')),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to sign in: $e')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -45,6 +63,45 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 16),
             const Text('أنت الآن في الصفحة الرئيسية'),
+            
+            // Add sign-in button
+            ElevatedButton(
+              onPressed: _signInWithGoogle,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Image.asset('assets/google_logo.png', height: 24),
+                  SizedBox(width: 12),
+                  Text('Sign in with Google'),
+                ],
+              ),
+            ),
+            
+            // Show user info if logged in
+            StreamBuilder<User?>(
+              stream: _authService.authStateChanges,
+              builder: (context, snapshot) {
+                if (snapshot.hasData && snapshot.data != null) {
+                  User user = snapshot.data!;
+                  return Column(
+                    children: [
+                      if (user.photoURL != null)
+                        CircleAvatar(
+                          backgroundImage: NetworkImage(user.photoURL!),
+                          radius: 24,
+                        ),
+                      SizedBox(height: 8),
+                      Text('Welcome, ${user.displayName ?? "User"}'),
+                      TextButton(
+                        onPressed: () => _authService.signOut(),
+                        child: Text('Sign Out'),
+                      ),
+                    ],
+                  );
+                }
+                return SizedBox.shrink();
+              },
+            ),
           ],
         ),
       ),
