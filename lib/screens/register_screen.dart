@@ -1,6 +1,9 @@
-import 'package:flutter/material.dart';
-import '../services/auth_service.dart';
 import 'dart:developer' as developer;
+
+import 'package:flutter/material.dart';
+
+import '../services/auth_service.dart';
+import '../utils/user_profile_checker.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -22,6 +25,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool _acceptTerms = false;
 
   @override
+  void initState() {
+    super.initState();
+    // Check if user is already logged in
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_authService.currentUser != null) {
+        Navigator.pushReplacementNamed(context, '/home');
+      }
+    });
+  }
+
+  @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
@@ -30,84 +44,107 @@ class _RegisterScreenState extends State<RegisterScreen> {
     super.dispose();
   }
 
+  // Register with email and password
   Future<void> _register() async {
-    if (_formKey.currentState!.validate() && _acceptTerms) {
-      setState(() => _isLoading = true);
-      try {
-        developer.log('Starting registration process...');
-        final userCredential = await _authService.registerWithEmailAndPassword(
-          _emailController.text.trim(),
-          _passwordController.text.trim(),
-          _nameController.text.trim(),
-        );
-        
-        developer.log('Registration successful, user: ${userCredential.user?.uid}');
-        
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('تم إنشاء الحساب بنجاح! يرجى تفعيل البريد الإلكتروني'),
-              backgroundColor: Colors.green,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.all(Radius.circular(12)),
-              ),
-            ),
-          );
-          
-          // Clear the navigation stack and go to home
-          Navigator.pushNamedAndRemoveUntil(
-            context,
-            '/home',
-            (route) => false,
-          );
-        }
-      } on AuthException catch (e) {
-        developer.log('Registration failed with AuthException: ${e.message}');
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(e.toString()),
-              backgroundColor: Colors.red[700],
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          );
-        }
-      } catch (e) {
-        developer.log('Registration failed with unexpected error: $e');
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('حدث خطأ غير متوقع: $e'),
-              backgroundColor: Colors.red[700],
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          );
-        }
-      } finally {
-        if (mounted) {
-          setState(() => _isLoading = false);
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    if (!_acceptTerms) {
+      _showErrorSnackbar('يجب الموافقة على الشروط والأحكام');
+      return;
+    }
+
+    setState(() => _isLoading = true);
+    try {
+      developer.log('Starting registration process');
+      developer.log('Calling registerWithEmailAndPassword');
+
+      final userCredential = await _authService.registerWithEmailAndPassword(
+        _emailController.text.trim(),
+        _passwordController.text.trim(),
+        _nameController.text.trim(),
+      );
+
+      developer.log('Registration successful: ${userCredential.user?.uid}');
+
+      // Ensure user profile exists in Firestore
+      developer.log(
+        'Calling forceCreateUserProfile to ensure user data in Firestore',
+      );
+      final profileCreated = await UserProfileChecker.forceCreateUserProfile();
+      developer.log('Profile creation result: $profileCreated');
+
+      // Send email verification if not already sent
+      if (userCredential.user != null && !userCredential.user!.emailVerified) {
+        try {
+          developer.log('Sending email verification');
+          await userCredential.user!.sendEmailVerification();
+          developer.log('Verification email sent');
+        } catch (e) {
+          developer.log('Error sending verification email: $e', error: e);
         }
       }
-    } else if (!_acceptTerms) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('يجب الموافقة على الشروط والأحكام'),
-          backgroundColor: Colors.red,
-        ),
+
+      if (mounted) {
+        developer.log('Showing success message and preparing navigation');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'تم إنشاء الحساب بنجاح! يرجى تفعيل البريد الإلكتروني',
+            ),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+
+        // Add a small delay to ensure Firebase Auth state is updated
+        developer.log('Adding delay before navigation');
+        await Future.delayed(const Duration(milliseconds: 500));
+
+        // Force navigation to home screen
+        developer.log('Navigating to home screen after registration');
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (context) => const HomeScreen()),
+          (route) => false, // Remove all previous routes
+        );
+      }
+    } on AuthException catch (e) {
+      developer.log(
+        'AuthException during registration: ${e.message}',
+        error: e,
       );
+      if (mounted) {
+        _showErrorSnackbar(e.toString());
+      }
+    } catch (e) {
+      developer.log('Unexpected error during registration: $e', error: e);
+      if (mounted) {
+        _showErrorSnackbar('حدث خطأ غير متوقع: $e');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
+  }
+
+  // Show error message
+  void _showErrorSnackbar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red[700],
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(title: const Text('إنشاء حساب')),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
@@ -116,7 +153,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const SizedBox(height: 48),
+                const SizedBox(height: 24),
                 Text(
                   'إنشاء حساب جديد',
                   style: Theme.of(context).textTheme.headlineMedium?.copyWith(
@@ -127,12 +164,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 const SizedBox(height: 8),
                 Text(
                   'قم بإنشاء حساب للمتابعة',
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: Colors.grey[600],
-                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyLarge?.copyWith(color: Colors.grey[600]),
                   textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 48),
+                const SizedBox(height: 32),
+
+                // Name field
                 TextFormField(
                   controller: _nameController,
                   decoration: const InputDecoration(
@@ -151,6 +190,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   },
                 ),
                 const SizedBox(height: 16),
+
+                // Email field
                 TextFormField(
                   controller: _emailController,
                   decoration: const InputDecoration(
@@ -170,6 +211,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   },
                 ),
                 const SizedBox(height: 16),
+
+                // Password field
                 TextFormField(
                   controller: _passwordController,
                   decoration: InputDecoration(
@@ -177,7 +220,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     prefixIcon: const Icon(Icons.lock_outline),
                     suffixIcon: IconButton(
                       icon: Icon(
-                        _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                        _obscurePassword
+                            ? Icons.visibility_off
+                            : Icons.visibility,
                       ),
                       onPressed: () {
                         setState(() => _obscurePassword = !_obscurePassword);
@@ -203,6 +248,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   },
                 ),
                 const SizedBox(height: 16),
+
+                // Confirm password field
                 TextFormField(
                   controller: _confirmPasswordController,
                   decoration: InputDecoration(
@@ -210,10 +257,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     prefixIcon: const Icon(Icons.lock_outline),
                     suffixIcon: IconButton(
                       icon: Icon(
-                        _obscureConfirmPassword ? Icons.visibility_off : Icons.visibility,
+                        _obscureConfirmPassword
+                            ? Icons.visibility_off
+                            : Icons.visibility,
                       ),
                       onPressed: () {
-                        setState(() => _obscureConfirmPassword = !_obscureConfirmPassword);
+                        setState(
+                          () =>
+                              _obscureConfirmPassword =
+                                  !_obscureConfirmPassword,
+                        );
                       },
                     ),
                   ),
@@ -231,7 +284,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   },
                 ),
                 const SizedBox(height: 16),
+
+                // Terms and conditions
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Checkbox(
                       value: _acceptTerms,
@@ -253,20 +309,33 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ],
                 ),
                 const SizedBox(height: 24),
+
+                // Register button
                 ElevatedButton(
                   onPressed: _isLoading ? null : _register,
-                  child: _isLoading
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                          ),
-                        )
-                      : const Text('إنشاء حساب'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child:
+                      _isLoading
+                          ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Colors.white,
+                              ),
+                            ),
+                          )
+                          : const Text('إنشاء حساب'),
                 ),
                 const SizedBox(height: 16),
+
+                // Login link
                 TextButton(
                   onPressed: () {
                     Navigator.pushReplacementNamed(context, '/login');
@@ -280,4 +349,4 @@ class _RegisterScreenState extends State<RegisterScreen> {
       ),
     );
   }
-} 
+}

@@ -1,5 +1,11 @@
+import 'dart:developer' as developer;
+
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+
 import '../services/auth_service.dart';
+import '../utils/user_profile_checker.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -9,225 +15,79 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  final _authService = AuthService();
-  final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController();
+  final AuthService _authService = AuthService();
   bool _isLoading = false;
-  bool _isEditing = false;
-  Map<String, dynamic>? _userProfile;
+  Map<String, dynamic>? _userData;
 
   @override
   void initState() {
     super.initState();
-    _loadUserProfile();
+    // Load user profile after the build is complete
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadUserProfile();
+    });
   }
 
-  @override
-  void dispose() {
-    _nameController.dispose();
-    super.dispose();
-  }
-
+  // Load user profile data
   Future<void> _loadUserProfile() async {
-    setState(() => _isLoading = true);
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      // User is not logged in, don't navigate during build phase
+      return;
+    }
+
     try {
-      final profile = await _authService.getUserProfile();
-      if (mounted) {
+      setState(() => _isLoading = true);
+
+      // First ensure profile exists
+      await UserProfileChecker.ensureUserProfile();
+
+      // Then get the profile data
+      final profileData = await UserProfileChecker.getUserProfile();
+
+      if (profileData != null) {
         setState(() {
-          _userProfile = profile;
-          if (profile != null) {
-            _nameController.text = profile['name'] ?? '';
-          }
+          _userData = profileData;
+          _isLoading = false;
+        });
+      } else {
+        setState(() {
+          _userData = {
+            'name': user.displayName ?? 'مستخدم',
+            'email': user.email ?? '',
+          };
           _isLoading = false;
         });
       }
     } catch (e) {
+      developer.log('Error loading user profile: $e');
       if (mounted) {
+        setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(e.toString()),
+            content: Text('حدث خطأ أثناء تحميل الملف الشخصي: $e'),
             backgroundColor: Colors.red,
           ),
         );
-        setState(() => _isLoading = false);
       }
     }
   }
 
-  Future<void> _updateProfile() async {
-    if (_formKey.currentState!.validate()) {
-      setState(() => _isLoading = true);
-      try {
-        await _authService.updateUserProfile(_nameController.text.trim());
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('تم تحديث الملف الشخصي بنجاح'),
-              backgroundColor: Colors.green,
-            ),
-          );
-          setState(() {
-            _isEditing = false;
-            _isLoading = false;
-          });
-          _loadUserProfile();
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(e.toString()),
-              backgroundColor: Colors.red,
-            ),
-          );
-          setState(() => _isLoading = false);
-        }
-      }
-    }
-  }
-
-  Future<void> _changePassword() async {
-    final newPasswordController = TextEditingController();
-    final confirmPasswordController = TextEditingController();
-
-    return showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('تغيير كلمة المرور'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: newPasswordController,
-              decoration: const InputDecoration(
-                labelText: 'كلمة المرور الجديدة',
-              ),
-              obscureText: true,
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: confirmPasswordController,
-              decoration: const InputDecoration(
-                labelText: 'تأكيد كلمة المرور',
-              ),
-              obscureText: true,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('إلغاء'),
-          ),
-          TextButton(
-            onPressed: () async {
-              if (newPasswordController.text.isEmpty ||
-                  confirmPasswordController.text.isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('الرجاء ملء جميع الحقول'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-                return;
-              }
-
-              if (newPasswordController.text != confirmPasswordController.text) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('كلمة المرور غير متطابقة'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-                return;
-              }
-
-              try {
-                await _authService.updatePassword(newPasswordController.text);
-                if (mounted) {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('تم تغيير كلمة المرور بنجاح'),
-                      backgroundColor: Colors.green,
-                    ),
-                  );
-                }
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(e.toString()),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
-              }
-            },
-            child: const Text('تغيير'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _deleteAccount() async {
-    return showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('حذف الحساب'),
-        content: const Text('هل أنت متأكد من حذف حسابك؟ لا يمكن التراجع عن هذا الإجراء.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('إلغاء'),
-          ),
-          TextButton(
-            onPressed: () async {
-              try {
-                await _authService.deleteAccount();
-                if (mounted) {
-                  Navigator.pushNamedAndRemoveUntil(
-                    context,
-                    '/login',
-                    (route) => false,
-                  );
-                }
-              } catch (e) {
-                if (mounted) {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(e.toString()),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
-              }
-            },
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('حذف'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _signOut() async {
+  // Handle logout
+  Future<void> _logout() async {
+    setState(() => _isLoading = true);
     try {
       await _authService.signOut();
-      if (mounted) {
-        Navigator.pushNamedAndRemoveUntil(
-          context,
-          '/login',
-          (route) => false,
-        );
-      }
+
+      // No need to navigate - AuthWrapper will handle this
+      // The StreamBuilder in AuthWrapper will detect the auth state change
+      // and automatically navigate to the login screen
     } catch (e) {
       if (mounted) {
+        setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(e.toString()),
+            content: Text('حدث خطأ أثناء تسجيل الخروج: $e'),
             backgroundColor: Colors.red,
           ),
         );
@@ -237,129 +97,88 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Scaffold(
-        body: Center(
-          child: CircularProgressIndicator(),
-        ),
-      );
+    return Scaffold(
+      appBar: AppBar(title: const Text('الملف الشخصي')),
+      body:
+          _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : _buildProfileContent(),
+    );
+  }
+
+  Widget _buildProfileContent() {
+    if (_userData == null) {
+      return const Center(child: Text('لا توجد بيانات للملف الشخصي'));
     }
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('الملف الشخصي'),
-        actions: [
-          if (!_isEditing)
-            IconButton(
-              icon: const Icon(Icons.edit),
-              onPressed: () {
-                setState(() => _isEditing = true);
-              },
-            ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const CircleAvatar(
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // Profile image
+          _userData!['photoURL'] != null
+              ? CircleAvatar(
                 radius: 50,
-                child: Icon(Icons.person, size: 50),
+                backgroundImage: NetworkImage(_userData!['photoURL']),
+              )
+              : const CircleAvatar(
+                radius: 50,
+                backgroundColor: Colors.green,
+                child: Icon(Icons.person, size: 50, color: Colors.white),
               ),
-              const SizedBox(height: 24),
-              if (_isEditing)
-                TextFormField(
-                  controller: _nameController,
-                  decoration: const InputDecoration(
-                    labelText: 'الاسم',
-                    prefixIcon: Icon(Icons.person_outline),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'الرجاء إدخال الاسم';
-                    }
-                    if (value.length < 3) {
-                      return 'الاسم يجب أن يكون 3 أحرف على الأقل';
-                    }
-                    return null;
-                  },
-                )
-              else
-                ListTile(
-                  leading: const Icon(Icons.person_outline),
-                  title: const Text('الاسم'),
-                  subtitle: Text(_userProfile?['name'] ?? ''),
-                ),
-              const SizedBox(height: 16),
-              ListTile(
-                leading: const Icon(Icons.email_outlined),
-                title: const Text('البريد الإلكتروني'),
-                subtitle: Text(_userProfile?['email'] ?? ''),
-              ),
-              const SizedBox(height: 16),
-              ListTile(
-                leading: const Icon(Icons.calendar_today),
-                title: const Text('تاريخ التسجيل'),
-                subtitle: Text(
-                  _userProfile?['createdAt'] != null
-                      ? DateTime.fromMillisecondsSinceEpoch(
-                              _userProfile!['createdAt'].millisecondsSinceEpoch)
-                          .toString()
-                          .split('.')[0]
-                      : '',
-                ),
-              ),
-              const SizedBox(height: 24),
-              if (_isEditing)
-                ElevatedButton(
-                  onPressed: _isLoading ? null : _updateProfile,
-                  child: _isLoading
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                          ),
-                        )
-                      : const Text('حفظ التغييرات'),
-                )
-              else
-                Column(
-                  children: [
-                    ElevatedButton.icon(
-                      onPressed: _changePassword,
-                      icon: const Icon(Icons.lock_outline),
-                      label: const Text('تغيير كلمة المرور'),
-                    ),
-                    const SizedBox(height: 16),
-                    ElevatedButton.icon(
-                      onPressed: _signOut,
-                      icon: const Icon(Icons.logout),
-                      label: const Text('تسجيل الخروج'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red,
-                        foregroundColor: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    TextButton.icon(
-                      onPressed: _deleteAccount,
-                      icon: const Icon(Icons.delete_forever),
-                      label: const Text('حذف الحساب'),
-                      style: TextButton.styleFrom(
-                        foregroundColor: Colors.red,
-                      ),
-                    ),
-                  ],
-                ),
-            ],
+          const SizedBox(height: 20),
+          Text(
+            _userData!['name'] ?? 'مستخدم',
+            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
           ),
-        ),
+          const SizedBox(height: 8),
+          Text(
+            _userData!['email'] ?? '',
+            style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+          ),
+          const SizedBox(height: 30),
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.email),
+            title: const Text('البريد الإلكتروني'),
+            subtitle: Text(_userData!['email'] ?? ''),
+          ),
+          if (_userData!['createdAt'] != null)
+            ListTile(
+              leading: const Icon(Icons.calendar_today),
+              title: const Text('تاريخ التسجيل'),
+              subtitle: Text(_formatTimestamp(_userData!['createdAt'])),
+            ),
+          const Divider(),
+          const SizedBox(height: 20),
+          ElevatedButton.icon(
+            onPressed: _logout,
+            icon: const Icon(Icons.logout),
+            label: const Text('تسجيل الخروج'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+              minimumSize: const Size(double.infinity, 50),
+            ),
+          ),
+        ],
       ),
     );
   }
-} 
+
+  // Helper method to format timestamp
+  String _formatTimestamp(dynamic timestamp) {
+    if (timestamp == null) return 'غير متوفر';
+
+    try {
+      if (timestamp is Timestamp) {
+        final date = timestamp.toDate();
+        return '${date.day}/${date.month}/${date.year}';
+      }
+      return 'غير متوفر';
+    } catch (e) {
+      return 'غير متوفر';
+    }
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "977295278599",
+    "project_id": "istachir12",
+    "storage_bucket": "istachir12.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:977295278599:android:6b8775c583af345b19a0a2",
+        "android_client_info": {
+          "package_name": "com.example.istachirna_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCXBGRuuclgykuGTMW5aYVlrgYWxCz1ym8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

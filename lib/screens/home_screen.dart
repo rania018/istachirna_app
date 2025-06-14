@@ -1,6 +1,11 @@
+import 'dart:developer' as developer;
+
 import 'package:flutter/material.dart';
+
 import '../services/auth_service.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'consultations_screen.dart';
+import 'login_screen.dart';
+import 'profile_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -12,8 +17,31 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
   final AuthService _authService = AuthService();
+  bool _isLoading = false;
 
+  @override
+  void initState() {
+    super.initState();
+    _checkAuthState();
+  }
+
+  // Check if user is authenticated
+  void _checkAuthState() {
+    if (_authService.currentUser == null) {
+      // If not authenticated, redirect to login
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const LoginScreen()),
+        );
+      });
+    }
+  }
+
+  // Handle bottom navigation
   void _onItemTapped(int index) {
+    if (index == _selectedIndex) return;
+
     setState(() {
       _selectedIndex = index;
     });
@@ -23,86 +51,173 @@ class _HomeScreenState extends State<HomeScreen> {
         // Already on home
         break;
       case 1:
-        Navigator.pushNamed(context, '/consultations');
+        // Navigate to consultations screen
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const ConsultationsScreen()),
+        ).then((_) => setState(() => _selectedIndex = 0));
         break;
       case 2:
-        Navigator.pushNamed(context, '/profile');
+        // Navigate to profile screen
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const ProfileScreen()),
+        ).then((_) => setState(() => _selectedIndex = 0));
         break;
     }
   }
 
-  void _signInWithGoogle() async {
+  // Handle logout
+  Future<void> _logout() async {
+    setState(() => _isLoading = true);
     try {
-      UserCredential? userCredential = await _authService.signInWithGoogle();
-      if (userCredential != null) {
-        // User signed in successfully
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Signed in as ${userCredential.user?.displayName ?? "User"}')),
+      developer.log('Logging out user');
+
+      // Get the user ID before signing out
+      final userId = _authService.currentUser?.uid;
+      developer.log('Attempting to log out user: $userId');
+
+      // Sign out from Firebase
+      await _authService.signOut();
+      developer.log('Firebase sign out successful');
+
+      // Add a small delay to ensure Firebase Auth state is updated
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      if (mounted) {
+        // Explicitly navigate to login screen after logout
+        developer.log('Navigating to login screen after logout');
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (context) => const LoginScreen()),
+          (route) => false, // Remove all previous routes
         );
+
+        developer.log('User logged out successfully: $userId');
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to sign in: $e')),
-      );
+      developer.log('Error during logout: $e', error: e);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('حدث خطأ أثناء تسجيل الخروج: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final user = _authService.currentUser;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('الرئيسية'),
-      ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              'مرحباً ${AuthService().currentUser?.email}',
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            const SizedBox(height: 16),
-            const Text('أنت الآن في الصفحة الرئيسية'),
-            
-            // Add sign-in button
-            ElevatedButton(
-              onPressed: _signInWithGoogle,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Image.asset('assets/google_logo.png', height: 24),
-                  SizedBox(width: 12),
-                  Text('Sign in with Google'),
-                ],
-              ),
-            ),
-            
-            // Show user info if logged in
-            StreamBuilder<User?>(
-              stream: _authService.authStateChanges,
-              builder: (context, snapshot) {
-                if (snapshot.hasData && snapshot.data != null) {
-                  User user = snapshot.data!;
-                  return Column(
-                    children: [
-                      if (user.photoURL != null)
-                        CircleAvatar(
-                          backgroundImage: NetworkImage(user.photoURL!),
-                          radius: 24,
-                        ),
-                      SizedBox(height: 8),
-                      Text('Welcome, ${user.displayName ?? "User"}'),
-                      TextButton(
-                        onPressed: () => _authService.signOut(),
-                        child: Text('Sign Out'),
+        actions: [
+          // Logout button
+          IconButton(
+            icon:
+                _isLoading
+                    ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
                       ),
-                    ],
-                  );
-                }
-                return SizedBox.shrink();
-              },
+                    )
+                    : const Icon(Icons.logout),
+            onPressed: _isLoading ? null : _logout,
+            tooltip: 'تسجيل الخروج',
+          ),
+        ],
+      ),
+      body: RefreshIndicator(
+        onRefresh: () async {
+          setState(() {});
+          return Future.delayed(const Duration(milliseconds: 500));
+        },
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(16),
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                const SizedBox(height: 24),
+
+                // User profile image
+                if (user?.photoURL != null)
+                  CircleAvatar(
+                    backgroundImage: NetworkImage(user!.photoURL!),
+                    radius: 50,
+                  )
+                else
+                  const CircleAvatar(
+                    backgroundColor: Colors.green,
+                    radius: 50,
+                    child: Icon(Icons.person, size: 50, color: Colors.white),
+                  ),
+                const SizedBox(height: 16),
+
+                // User name
+                Text(
+                  'مرحباً ${user?.displayName ?? user?.email?.split('@').first ?? 'مستخدم'}',
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+
+                // User email
+                if (user?.email != null)
+                  Text(
+                    user!.email!,
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
+                  ),
+                const SizedBox(height: 32),
+
+                // App content
+                const Card(
+                  elevation: 2,
+                  margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Column(
+                      children: [
+                        Icon(Icons.info_outline, size: 48, color: Colors.green),
+                        SizedBox(height: 16),
+                        Text(
+                          'مرحباً بك في تطبيق استشرنا',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        SizedBox(height: 8),
+                        Text(
+                          'يمكنك الآن الاستفادة من خدماتنا الاستشارية المتنوعة',
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
             ),
-          ],
+          ),
         ),
       ),
       bottomNavigationBar: BottomNavigationBar(
@@ -125,9 +240,9 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
         currentIndex: _selectedIndex,
         selectedItemColor: Colors.green[700],
-        unselectedItemColor: Colors.grey,
         onTap: _onItemTapped,
+        type: BottomNavigationBarType.fixed,
       ),
     );
   }
-} 
+}

@@ -1,8 +1,1 @@
-{
-  "firestore": {
-    "database": "(default)",
-    "location": "nam5",
-    "rules": "firestore.rules",
-    "indexes": "firestore.indexes.json"
-  }
-}
+{"firestore":{"database":"(default)","location":"nam5","rules":"firestore.rules","indexes":"firestore.indexes.json"},"flutter":{"platforms":{"android":{"default":{"projectId":"istachir12","appId":"1:977295278599:android:6b8775c583af345b19a0a2","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"istachir12","configurations":{"android":"1:977295278599:android:6b8775c583af345b19a0a2","ios":"1:977295278599:ios:c4433b49aee8324b19a0a2","web":"1:977295278599:web:30641095d62171dc19a0a2"}}}}}}

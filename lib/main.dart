@@ -1,53 +1,43 @@
+import 'dart:developer' as developer;
+
+import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'screens/splash_screen.dart';
-import 'screens/login_screen.dart';
-import 'screens/register_screen.dart';
-import 'screens/home_screen.dart';
-import 'screens/profile_screen.dart';
+
 import 'firebase_options.dart';
+import 'screens/auth_wrapper.dart';
+import 'screens/debug_screen.dart';
+import 'screens/home_screen.dart';
+import 'screens/login_screen.dart';
+import 'screens/profile_screen.dart';
+import 'screens/register_screen.dart';
+import 'services/auth_service.dart';
 import 'utils/firebase_config.dart';
-import 'dart:developer' as developer;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   try {
-    // Initialize Firebase only if it hasn't been initialized
-    if (Firebase.apps.isEmpty) {
-      await Firebase.initializeApp(
-        options: DefaultFirebaseOptions.currentPlatform,
-      );
-      developer.log('Firebase initialized successfully');
-    } else {
-      developer.log('Firebase already initialized');
-    }
-    
-    // Check Firebase configuration
-    final isConfigured = await FirebaseConfig.checkConfiguration();
-    if (!isConfigured) {
-      developer.log('Firebase configuration check failed');
-      // You might want to show an error screen or handle this case
-    }
-    
-    // Configure Firebase services
-    await FirebaseConfig.configureFirestoreRules();
-    await FirebaseConfig.configureAuthSettings();
-    
-    runApp(const MyApp());
+    // Initialize Firebase
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+
+    // Configure Firebase
+    await FirebaseConfig.configure();
+
+    // Initialize auth service
+    final authService = AuthService();
+    await authService.initializeAuth();
+
+    developer.log('Firebase initialized successfully');
   } catch (e) {
     developer.log('Error initializing Firebase: $e', error: e);
-    // You might want to show an error screen or handle this case
-    runApp(MaterialApp(
-      home: Scaffold(
-        body: Center(
-          child: Text('Error initializing app: $e'),
-        ),
-      ),
-    ));
   }
+
+  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
@@ -59,51 +49,17 @@ class MyApp extends StatelessWidget {
       title: 'استشرنا',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        primarySwatch: Colors.green,
-        textTheme: GoogleFonts.cairoTextTheme(
-          Theme.of(context).textTheme,
-        ),
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.green),
+        useMaterial3: true,
+        textTheme: GoogleFonts.cairoTextTheme(Theme.of(context).textTheme),
         appBarTheme: AppBarTheme(
-          backgroundColor: Colors.green[700],
-          elevation: 0,
-          centerTitle: true,
-        ),
-        inputDecorationTheme: InputDecorationTheme(
-          filled: true,
-          fillColor: Colors.grey[100],
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide.none,
+          backgroundColor: Colors.green,
+          foregroundColor: Colors.white,
+          titleTextStyle: GoogleFonts.cairo(
+            fontSize: 22,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
           ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide.none,
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: Colors.green[700]!),
-          ),
-          errorBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: Colors.red[700]!),
-          ),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        ),
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.green[700],
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-        ),
-        pageTransitionsTheme: PageTransitionsTheme(
-          builders: {
-            TargetPlatform.android: CustomPageTransitionBuilder(),
-            TargetPlatform.iOS: CustomPageTransitionBuilder(),
-          },
         ),
       ),
       localizationsDelegates: const [
@@ -111,17 +67,39 @@ class MyApp extends StatelessWidget {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      supportedLocales: const [
-        Locale('ar', 'SA'),
-      ],
-      locale: const Locale('ar', 'SA'),
-      initialRoute: '/',
+      supportedLocales: const [Locale('ar', '')],
+      home: const AuthWrapper(),
+      // Define routes for navigation
       routes: {
-        '/': (context) => const SplashScreen(),
         '/login': (context) => const LoginScreen(),
         '/register': (context) => const RegisterScreen(),
         '/home': (context) => const HomeScreen(),
         '/profile': (context) => const ProfileScreen(),
+        '/debug': (context) => const DebugScreen(),
+      },
+      builder: (context, child) {
+        return Directionality(
+          textDirection: TextDirection.rtl,
+          child: Stack(
+            children: [
+              child!,
+              // Only show debug button in debug mode
+              if (kDebugMode)
+                Positioned(
+                  bottom: 80,
+                  left: 16,
+                  child: FloatingActionButton.small(
+                    heroTag: 'debugButton',
+                    onPressed: () {
+                      Navigator.of(context).pushNamed('/debug');
+                    },
+                    backgroundColor: Colors.grey.withOpacity(0.7),
+                    child: const Icon(Icons.bug_report),
+                  ),
+                ),
+            ],
+          ),
+        );
       },
     );
   }
@@ -136,10 +114,7 @@ class CustomPageTransitionBuilder extends PageTransitionsBuilder {
     Animation<double> secondaryAnimation,
     Widget child,
   ) {
-    return FadeTransition(
-      opacity: animation,
-      child: child,
-    );
+    return FadeTransition(opacity: animation, child: child);
   }
 }
 
@@ -149,9 +124,7 @@ class HomePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('استشرنا'),
-      ),
+      appBar: AppBar(title: const Text('استشرنا')),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -171,5 +144,3 @@ class HomePage extends StatelessWidget {
     );
   }
 }
-
-

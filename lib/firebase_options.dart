@@ -32,30 +32,31 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'YOUR-WEB-API-KEY',
-    appId: 'YOUR-WEB-APP-ID',
-    messagingSenderId: 'YOUR-SENDER-ID',
-    projectId: 'YOUR-PROJECT-ID',
-    authDomain: 'YOUR-AUTH-DOMAIN',
-    storageBucket: 'YOUR-STORAGE-BUCKET',
+    apiKey: 'AIzaSyCfulboLpYks5Ibz8IIaw5s8Gj2fjN46vE',
+    appId: '1:977295278599:web:30641095d62171dc19a0a2',
+    messagingSenderId: '977295278599',
+    projectId: 'istachir12',
+    authDomain: 'istachir12.firebaseapp.com',
+    storageBucket: 'istachir12.firebasestorage.app',
+    measurementId: 'G-9QBR6VQ4YS',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'YOUR-ANDROID-API-KEY',
-    appId: 'YOUR-ANDROID-APP-ID',
-    messagingSenderId: 'YOUR-SENDER-ID',
-    projectId: 'YOUR-PROJECT-ID',
-    storageBucket: 'YOUR-STORAGE-BUCKET',
+    apiKey: 'AIzaSyCXBGRuuclgykuGTMW5aYVlrgYWxCz1ym8',
+    appId: '1:977295278599:android:6b8775c583af345b19a0a2',
+    messagingSenderId: '977295278599',
+    projectId: 'istachir12',
+    storageBucket: 'istachir12.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'YOUR-IOS-API-KEY',
-    appId: 'YOUR-IOS-APP-ID',
-    messagingSenderId: 'YOUR-SENDER-ID',
-    projectId: 'YOUR-PROJECT-ID',
-    storageBucket: 'YOUR-STORAGE-BUCKET',
-    iosClientId: 'YOUR-IOS-CLIENT-ID',
-    iosBundleId: 'YOUR-IOS-BUNDLE-ID',
+    apiKey: 'AIzaSyBnEOuksYS-lDfRe0dHiEY6kMvvsKPxwx8',
+    appId: '1:977295278599:ios:c4433b49aee8324b19a0a2',
+    messagingSenderId: '977295278599',
+    projectId: 'istachir12',
+    storageBucket: 'istachir12.firebasestorage.app',
+    iosClientId: '977295278599-v04egqc16gnhtod03kmt2qtm699qvnrk.apps.googleusercontent.com',
+    iosBundleId: 'com.example.istachirnaApp',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(

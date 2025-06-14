@@ -1,6 +1,10 @@
-import 'package:flutter/material.dart';
-import '../services/auth_service.dart';
 import 'dart:developer' as developer;
+
+import 'package:flutter/material.dart';
+
+import '../services/auth_service.dart';
+import '../utils/user_profile_checker.dart';
+import 'home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -15,8 +19,20 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
   final _authService = AuthService();
   bool _isLoading = false;
+  bool _isGoogleLoading = false;
   bool _obscurePassword = true;
   bool _rememberMe = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Check if user is already logged in
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_authService.currentUser != null) {
+        Navigator.pushReplacementNamed(context, '/home');
+      }
+    });
+  }
 
   @override
   void dispose() {
@@ -25,46 +41,43 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
+  // Email/password login
   Future<void> _login() async {
     if (_formKey.currentState!.validate()) {
       setState(() => _isLoading = true);
       try {
-        developer.log('Starting login process...');
-        await _authService.signInWithEmailAndPassword(
+        developer.log('Starting email/password login process');
+        final userCredential = await _authService.signInWithEmailAndPassword(
           _emailController.text.trim(),
           _passwordController.text.trim(),
         );
-        
-        if (mounted) {
-          Navigator.pushReplacementNamed(context, '/home');
-        }
+
+        // Ensure user profile exists in Firestore
+        final profileCreated =
+            await UserProfileChecker.forceCreateUserProfile();
+        developer.log('Profile creation result: $profileCreated');
+
+        // Check if the widget is still mounted before proceeding
+        if (!mounted) return;
+
+        // Add a small delay to ensure Firebase Auth state is updated
+        await Future.delayed(const Duration(milliseconds: 500));
+
+        // Force navigation to home screen
+        developer.log('Navigating to home screen after login');
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (context) => const HomeScreen()),
+          (route) => false, // Remove all previous routes
+        );
+
+        developer.log('Login successful for user: ${userCredential.user?.uid}');
       } on AuthException catch (e) {
-        developer.log('Login failed with AuthException: ${e.message}');
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(e.toString()),
-              backgroundColor: Colors.red[700],
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          );
+          _showErrorSnackbar(e.toString());
         }
       } catch (e) {
-        developer.log('Login failed with unexpected error: $e');
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('حدث خطأ غير متوقع: $e'),
-              backgroundColor: Colors.red[700],
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          );
+          _showErrorSnackbar('حدث خطأ غير متوقع: $e');
         }
       } finally {
         if (mounted) {
@@ -74,48 +87,126 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  // Google sign in
+  Future<void> _signInWithGoogle() async {
+    setState(() => _isGoogleLoading = true);
+    try {
+      developer.log('Starting Google sign-in process');
+      final userCredential = await _authService.signInWithGoogle();
+
+      if (userCredential == null) {
+        // User cancelled the sign-in flow
+        developer.log('Google sign-in was cancelled by user');
+        if (mounted) {
+          setState(() => _isGoogleLoading = false);
+        }
+        return;
+      }
+
+      // Ensure user profile exists in Firestore
+      final profileCreated = await UserProfileChecker.forceCreateUserProfile();
+      developer.log('Profile creation result: $profileCreated');
+
+      developer.log('Google sign-in successful: ${userCredential.user?.uid}');
+
+      // Check if the widget is still mounted before proceeding
+      if (!mounted) return;
+
+      // Add a small delay to ensure Firebase Auth state is updated
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      // Force navigation to home screen
+      developer.log('Navigating to home screen after Google sign-in');
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => const HomeScreen()),
+        (route) => false, // Remove all previous routes
+      );
+    } on AuthException catch (e) {
+      if (mounted) {
+        _showErrorSnackbar(e.toString());
+      }
+    } catch (e) {
+      if (mounted) {
+        _showErrorSnackbar('حدث خطأ غير متوقع: $e');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isGoogleLoading = false);
+      }
+    }
+  }
+
+  // Reset password
   Future<void> _resetPassword() async {
     final email = _emailController.text.trim();
     if (email.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('الرجاء إدخال البريد الإلكتروني'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      _showErrorSnackbar('الرجاء إدخال البريد الإلكتروني');
       return;
     }
 
     try {
-      setState(() => _isLoading = true);
       await _authService.resetPassword(email);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني'),
+            content: Text('تم إرسال رابط إعادة تعيين كلمة المرور'),
             backgroundColor: Colors.green,
           ),
         );
       }
     } on AuthException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.toString()),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
+        _showErrorSnackbar(e.toString());
       }
     }
+  }
+
+  // Show error message
+  void _showErrorSnackbar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red[700],
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+  }
+
+  // Show message
+  void _showMessage(String message, {bool isError = true}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isError ? Colors.red[700] : Colors.green,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+  }
+
+  // Show dialog
+  void _showDialog(String title, String message) {
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: Text(title),
+            content: Text(message),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('حسناً'),
+              ),
+            ],
+          ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(title: const Text('تسجيل الدخول')),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
@@ -124,7 +215,7 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const SizedBox(height: 48),
+                const SizedBox(height: 40),
                 Text(
                   'تسجيل الدخول',
                   style: Theme.of(context).textTheme.headlineMedium?.copyWith(
@@ -135,12 +226,14 @@ class _LoginScreenState extends State<LoginScreen> {
                 const SizedBox(height: 8),
                 Text(
                   'مرحباً بعودتك!',
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: Colors.grey[600],
-                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyLarge?.copyWith(color: Colors.grey[600]),
                   textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 48),
+                const SizedBox(height: 40),
+
+                // Email field
                 TextFormField(
                   controller: _emailController,
                   decoration: const InputDecoration(
@@ -160,6 +253,8 @@ class _LoginScreenState extends State<LoginScreen> {
                   },
                 ),
                 const SizedBox(height: 16),
+
+                // Password field
                 TextFormField(
                   controller: _passwordController,
                   decoration: InputDecoration(
@@ -167,7 +262,9 @@ class _LoginScreenState extends State<LoginScreen> {
                     prefixIcon: const Icon(Icons.lock_outline),
                     suffixIcon: IconButton(
                       icon: Icon(
-                        _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                        _obscurePassword
+                            ? Icons.visibility_off
+                            : Icons.visibility,
                       ),
                       onPressed: () {
                         setState(() => _obscurePassword = !_obscurePassword);
@@ -185,6 +282,8 @@ class _LoginScreenState extends State<LoginScreen> {
                   },
                 ),
                 const SizedBox(height: 16),
+
+                // Remember me & Forgot password
                 Row(
                   children: [
                     Checkbox(
@@ -202,25 +301,87 @@ class _LoginScreenState extends State<LoginScreen> {
                   ],
                 ),
                 const SizedBox(height: 24),
+
+                // Login button
                 ElevatedButton(
                   onPressed: _isLoading ? null : _login,
-                  child: _isLoading
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                          ),
-                        )
-                      : const Text('تسجيل الدخول'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child:
+                      _isLoading
+                          ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Colors.white,
+                              ),
+                            ),
+                          )
+                          : const Text('تسجيل الدخول'),
                 ),
                 const SizedBox(height: 16),
+
+                // Register link
                 TextButton(
                   onPressed: () {
                     Navigator.pushReplacementNamed(context, '/register');
                   },
                   child: const Text('ليس لديك حساب؟ إنشاء حساب جديد'),
+                ),
+                const SizedBox(height: 24),
+
+                // Divider
+                Row(
+                  children: [
+                    Expanded(child: Divider(color: Colors.grey[400])),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Text(
+                        'أو',
+                        style: TextStyle(color: Colors.grey[600]),
+                      ),
+                    ),
+                    Expanded(child: Divider(color: Colors.grey[400])),
+                  ],
+                ),
+                const SizedBox(height: 24),
+
+                // Google sign in button
+                ElevatedButton.icon(
+                  onPressed: _isGoogleLoading ? null : _signInWithGoogle,
+                  icon:
+                      _isGoogleLoading
+                          ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Colors.black54,
+                              ),
+                            ),
+                          )
+                          : Image.asset('assets/google_logo.png', height: 24),
+                  label: Text(
+                    _isGoogleLoading
+                        ? 'جاري تسجيل الدخول...'
+                        : 'تسجيل الدخول باستخدام Google',
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: Colors.black87,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      side: BorderSide(color: Colors.grey[300]!),
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -229,4 +390,4 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
     );
   }
-} 
+}

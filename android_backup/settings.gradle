@@ -1,0 +1,22 @@
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+rootProject.name = "istachirna_app"
+include(":app")
+
+// This is required for Flutter
+setBinding(new Binding([gradle: this]))
+evaluate(new File(settingsDir.parentFile, '.android/include_flutter.groovy'))

@@ -12,7 +12,20 @@
           "package_name": "com.example.istachirna_app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "977295278599-sug688i67mpl3mee55872tah5mni167t.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.istachirna_app",
+            "certificate_hash": "82814f6e0a3bbc456d8bd68d70f51553f75fe653"
+          }
+        },
+        {
+          "client_id": "977295278599-acl9un85ipiknd112kj9oqflqa8vflaf.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyCXBGRuuclgykuGTMW5aYVlrgYWxCz1ym8"
@@ -20,7 +33,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "977295278599-acl9un85ipiknd112kj9oqflqa8vflaf.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "977295278599-v04egqc16gnhtod03kmt2qtm699qvnrk.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.istachirnaApp"
+              }
+            }
+          ]
         }
       }
     }
